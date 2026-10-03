@@ -1,106 +1,123 @@
-#include <stdio.h>
+/*
+ * busqueda.c
+ * Búsqueda lineal sobre la lista y búsqueda binaria sobre un índice
+ * (arreglo de punteros a nodos) ordenado por ID.
+ */
 #include <stdlib.h>
 #include "busqueda.h"
 
-/* Busca un ID recorriendo la lista nodo por nodo.
-   Complejidad: O(n). */
-Nodo* busqueda_lineal(Nodo *cabeza, int id_buscado, long *comparaciones) {
-    Nodo *actual = cabeza;
-    long conteo = 0;
+/* ------------------------------------------------------------------ */
+/* Merge Sort del arreglo de punteros (ordena por ID ascendente)       */
+/* ------------------------------------------------------------------ */
 
-    while (actual != NULL) {
-        conteo++;
+/* Mezcla las mitades ordenadas a[izq..medio] y a[medio+1..der] usando tmp */
+static void mezclarIndice(Nodo **a, Nodo **tmp, int izq, int medio, int der) {
+    int i = izq;
+    int j = medio + 1;
+    int k = izq;
 
-        if (actual->dato.id == id_buscado) {
-            if (comparaciones != NULL)
-                *comparaciones = conteo;
-
-            return actual;
+    while (i <= medio && j <= der) {
+        if (a[i]->id <= a[j]->id) {
+            tmp[k++] = a[i++];
+        } else {
+            tmp[k++] = a[j++];
         }
-
-        actual = actual->siguiente;
     }
-
-    if (comparaciones != NULL)
-        *comparaciones = conteo;
-
-    return NULL;
+    while (i <= medio) {
+        tmp[k++] = a[i++];
+    }
+    while (j <= der) {
+        tmp[k++] = a[j++];
+    }
+    for (k = izq; k <= der; k++) {
+        a[k] = tmp[k];
+    }
 }
 
+/* Merge Sort recursivo sobre el rango [izq, der] (la profundidad es log2 n) */
+static void mergeSortIndice(Nodo **a, Nodo **tmp, int izq, int der) {
+    if (izq >= der) {
+        return;
+    }
+    int medio = izq + (der - izq) / 2;
+    mergeSortIndice(a, tmp, izq, medio);
+    mergeSortIndice(a, tmp, medio + 1, der);
+    mezclarIndice(a, tmp, izq, medio, der);
+}
 
-/* Construye un índice con los ID y punteros de cada nodo.
-   Complejidad: O(n). */
-EntradaIndice* construir_indice(Nodo *cabeza, int *tamano_out) {
+/* ------------------------------------------------------------------ */
+/* Índice                                                              */
+/* ------------------------------------------------------------------ */
 
-    int n = contar_nodos(cabeza);
+Indice construirIndice(const Lista *lista) {
+    Indice indice;
+    indice.nodos = NULL;
+    indice.tamano = 0;
 
-    EntradaIndice *indice =
-        (EntradaIndice*) malloc(sizeof(EntradaIndice) * (n > 0 ? n : 1));
-
-    if (indice == NULL) {
-        fprintf(stderr,
-                "Error: no se pudo asignar memoria para el indice.\n");
-        exit(EXIT_FAILURE);
+    if (lista->tamano <= 0) {
+        return indice;
     }
 
-    Nodo *actual = cabeza;
-    int i = 0;
-
-    while (actual != NULL) {
-        indice[i].id = actual->dato.id;
-        indice[i].puntero = actual;
-
-        i++;
-        actual = actual->siguiente;
+    Nodo **nodos = (Nodo **)malloc((size_t)lista->tamano * sizeof(Nodo *));
+    Nodo **tmp = (Nodo **)malloc((size_t)lista->tamano * sizeof(Nodo *));
+    if (nodos == NULL || tmp == NULL) {
+        free(nodos);
+        free(tmp);
+        return indice;   /* índice vacío si falla la memoria */
     }
 
-    *tamano_out = n;
+    /* Un puntero por cada nodo de la lista */
+    int n = 0;
+    for (Nodo *actual = lista->cabeza; actual != NULL; actual = actual->siguiente) {
+        nodos[n++] = actual;
+    }
 
+    mergeSortIndice(nodos, tmp, 0, n - 1);
+    free(tmp);
+
+    indice.nodos = nodos;
+    indice.tamano = n;
     return indice;
 }
 
+void liberarIndice(Indice *indice) {
+    free(indice->nodos);
+    indice->nodos = NULL;
+    indice->tamano = 0;
+}
 
-/* Realiza búsqueda binaria sobre el índice.
-   Requiere que los ID estén ordenados.
-   Complejidad: O(log n). */
-Nodo* busqueda_indexada(EntradaIndice *indice, int tamano,
-                        int id_buscado, long *comparaciones) {
+/* ------------------------------------------------------------------ */
+/* Búsquedas                                                           */
+/* ------------------------------------------------------------------ */
 
-    int inicio = 0;
-    int fin = tamano - 1;
-    long conteo = 0;
-
-    while (inicio <= fin) {
-
-        conteo++;
-
-        int medio = inicio + (fin - inicio) / 2;
-
-        if (indice[medio].id == id_buscado) {
-
-            if (comparaciones != NULL)
-                *comparaciones = conteo;
-
-            return indice[medio].puntero;
-
-        } else if (indice[medio].id < id_buscado) {
-
-            inicio = medio + 1;
-
-        } else {
-
-            fin = medio - 1;
+Nodo *busquedaLineal(const Lista *lista, int id) {
+    for (Nodo *actual = lista->cabeza; actual != NULL; actual = actual->siguiente) {
+        if (actual->id == id) {
+            return actual;
         }
     }
-
-    if (comparaciones != NULL)
-        *comparaciones = conteo;
-
     return NULL;
 }
 
+/* Búsqueda binaria recursiva sobre nodos[bajo..alto] */
+static Nodo *binariaRec(Nodo **nodos, int bajo, int alto, int id) {
+    if (bajo > alto) {
+        return NULL;
+    }
+    int medio = bajo + (alto - bajo) / 2;
 
-/* Libera la memoria reservada para el índice auxiliar. */
-void liberar_indice(EntradaIndice *indice) {
-    free(indice);
+    if (nodos[medio]->id == id) {
+        return nodos[medio];
+    }
+    if (id < nodos[medio]->id) {
+        return binariaRec(nodos, bajo, medio - 1, id);
+    }
+    return binariaRec(nodos, medio + 1, alto, id);
+}
+
+Nodo *busquedaBinaria(const Indice *indice, int id) {
+    if (indice->nodos == NULL || indice->tamano <= 0) {
+        return NULL;
+    }
+    return binariaRec(indice->nodos, 0, indice->tamano - 1, id);
 }

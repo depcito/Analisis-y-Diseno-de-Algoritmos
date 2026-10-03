@@ -1,41 +1,97 @@
-#include <stdio.h>
-#include <stdlib.h>
+/*
+ * ordenamiento.c
+ * Implementación de Selection Sort y Merge Sort sobre la lista enlazada.
+ * Ambos algoritmos reordenan los enlaces de los nodos; nunca copian datos
+ * ni usan arreglos temporales.
+ */
+#include <stddef.h>
 #include "ordenamiento.h"
-#include "nodo.h"
 
-/* ---------- Fuerza bruta: Bubble Sort ---------- */
-static void intercambiar_datos(Nodo *a, Nodo *b) {
-    Paquete temp = a->dato;
-    a->dato = b->dato;
-    b->dato = temp;
+int comparar(const Nodo *a, const Nodo *b) {
+    if (a->prioridad != b->prioridad) {
+        return a->prioridad - b->prioridad;
+    }
+    /* Desempate por ID (se evita restar para no arriesgar desbordamiento) */
+    return (a->id > b->id) - (a->id < b->id);
 }
 
-void bubble_sort_lista(Nodo *cabeza) {
-    if (cabeza == NULL) return;
+/* ------------------------------------------------------------------ */
+/* Fuerza bruta: Selection Sort                                        */
+/* ------------------------------------------------------------------ */
 
-    int huboIntercambio;
-    Nodo *actual;
-    Nodo *ultimo = NULL; /* frontera del segmento ya ordenado */
+void selectionSort(Lista *lista) {
+    Nodo *sinOrdenar = lista->cabeza;   /* parte pendiente de ordenar */
+    Nodo *ordenadaCabeza = NULL;        /* parte ya ordenada */
+    Nodo *ordenadaCola = NULL;
 
-    do {
-        huboIntercambio = 0;
-        actual = cabeza;
-        while (actual->siguiente != ultimo) {
-            if (actual->dato.id > actual->siguiente->dato.id) {
-                intercambiar_datos(actual, actual->siguiente);
-                huboIntercambio = 1;
+    while (sinOrdenar != NULL) {
+        /* Busca el mínimo de la parte sin ordenar y el nodo anterior a él */
+        Nodo *minimo = sinOrdenar;
+        Nodo *anteriorMinimo = NULL;
+        Nodo *anterior = sinOrdenar;
+        for (Nodo *actual = sinOrdenar->siguiente; actual != NULL;
+             anterior = actual, actual = actual->siguiente) {
+            if (comparar(actual, minimo) < 0) {
+                minimo = actual;
+                anteriorMinimo = anterior;
             }
-            actual = actual->siguiente;
         }
-        ultimo = actual;
-    } while (huboIntercambio);
+
+        /* Desenlaza el mínimo de la parte sin ordenar */
+        if (anteriorMinimo == NULL) {
+            sinOrdenar = minimo->siguiente;
+        } else {
+            anteriorMinimo->siguiente = minimo->siguiente;
+        }
+        minimo->siguiente = NULL;
+
+        /* Lo agrega al final de la parte ordenada */
+        if (ordenadaCola == NULL) {
+            ordenadaCabeza = minimo;
+        } else {
+            ordenadaCola->siguiente = minimo;
+        }
+        ordenadaCola = minimo;
+    }
+
+    lista->cabeza = ordenadaCabeza;
+    lista->cola = ordenadaCola;
 }
 
-/* ---------- Divide y venceras: Merge Sort ---------- */
-static Nodo* dividir_lista(Nodo *cabeza) {
-    /* Tecnica de punteros lento/rapido para hallar el punto medio */
-    if (cabeza == NULL || cabeza->siguiente == NULL) return NULL;
+/* ------------------------------------------------------------------ */
+/* Dividir y conquistar: Merge Sort                                    */
+/* ------------------------------------------------------------------ */
 
+/*
+ * Mezcla iterativamente dos listas ya ordenadas usando un nodo centinela.
+ * Con <= se toma primero el nodo de a en caso de empate (ordenamiento estable).
+ */
+static Nodo *mezclar(Nodo *a, Nodo *b) {
+    Nodo centinela;
+    Nodo *cola = &centinela;
+    centinela.siguiente = NULL;
+
+    while (a != NULL && b != NULL) {
+        if (comparar(a, b) <= 0) {
+            cola->siguiente = a;
+            a = a->siguiente;
+        } else {
+            cola->siguiente = b;
+            b = b->siguiente;
+        }
+        cola = cola->siguiente;
+    }
+    cola->siguiente = (a != NULL) ? a : b;
+
+    return centinela.siguiente;
+}
+
+/*
+ * Parte la lista en dos mitades con punteros lento y rápido.
+ * Corta la primera mitad y devuelve la cabeza de la segunda.
+ * Requiere que la lista tenga al menos 2 nodos.
+ */
+static Nodo *dividir(Nodo *cabeza) {
     Nodo *lento = cabeza;
     Nodo *rapido = cabeza->siguiente;
 
@@ -44,35 +100,33 @@ static Nodo* dividir_lista(Nodo *cabeza) {
         rapido = rapido->siguiente->siguiente;
     }
 
-    Nodo *mitad = lento->siguiente;
-    lento->siguiente = NULL; /* corta la primera mitad */
-    return mitad;
+    Nodo *segunda = lento->siguiente;
+    lento->siguiente = NULL;
+    return segunda;
 }
 
-static Nodo* mezclar(Nodo *izq, Nodo *der) {
-    if (izq == NULL) return der;
-    if (der == NULL) return izq;
-
-    Nodo *resultado;
-    if (izq->dato.id <= der->dato.id) {
-        resultado = izq;
-        resultado->siguiente = mezclar(izq->siguiente, der);
-    } else {
-        resultado = der;
-        resultado->siguiente = mezclar(izq, der->siguiente);
-    }
-    return resultado;
-}
-
-Nodo* merge_sort_lista(Nodo *cabeza) {
+/* Merge Sort recursivo sobre una cadena de nodos; devuelve la nueva cabeza */
+static Nodo *mergeSortNodos(Nodo *cabeza) {
     if (cabeza == NULL || cabeza->siguiente == NULL) {
         return cabeza;
     }
 
-    Nodo *mitad = dividir_lista(cabeza);
+    Nodo *segunda = dividir(cabeza);
+    Nodo *izquierda = mergeSortNodos(cabeza);
+    Nodo *derecha = mergeSortNodos(segunda);
 
-    Nodo *izq = merge_sort_lista(cabeza);
-    Nodo *der = merge_sort_lista(mitad);
+    return mezclar(izquierda, derecha);
+}
 
-    return mezclar(izq, der);
+void mergeSort(Lista *lista) {
+    lista->cabeza = mergeSortNodos(lista->cabeza);
+
+    /* Recalcula la cola recorriendo la lista una vez */
+    Nodo *ultimo = lista->cabeza;
+    if (ultimo != NULL) {
+        while (ultimo->siguiente != NULL) {
+            ultimo = ultimo->siguiente;
+        }
+    }
+    lista->cola = ultimo;
 }

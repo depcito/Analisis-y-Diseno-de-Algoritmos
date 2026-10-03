@@ -1,28 +1,44 @@
+/*
+ * busqueda.h
+ * Búsqueda de paquetes por ID:
+ *   - Búsqueda lineal directamente sobre la lista enlazada.
+ *   - Solución mixta: un índice (arreglo de punteros a los nodos) ordenado
+ *     por ID sobre el que se aplica búsqueda binaria.
+ */
 #ifndef BUSQUEDA_H
 #define BUSQUEDA_H
 
-#include "nodo.h"
+#include "paquetes.h"
 
-/* Búsqueda lineal de un nodo por ID.
-   Guarda la cantidad de comparaciones realizadas. */
-Nodo* busqueda_lineal(Nodo *cabeza, int id_buscado, long *comparaciones);
+/*
+ * Arreglo auxiliar de punteros a los nodos de la lista, ordenado por ID.
+ * Los nodos pertenecen a la lista; el índice solo guarda punteros a ellos.
+ */
+typedef struct Indice {
+    Nodo **nodos;
+    int tamano;
+} Indice;
 
-/* Estructura utilizada para crear un índice auxiliar.
-   Guarda el ID y un puntero al nodo correspondiente. */
-typedef struct {
-    int id;
-    Nodo *puntero;
-} EntradaIndice;
+/*
+ * Recorre la lista, guarda un puntero por nodo y ordena el arreglo por ID
+ * con un Merge Sort propio. Si falla la reserva de memoria devuelve un
+ * índice vacío (nodos = NULL, tamano = 0).
+ */
+Indice construirIndice(const Lista *lista);
 
-/* Construye un arreglo auxiliar a partir de la lista.
-   La lista debe estar ordenada por ID para usar búsqueda binaria. */
-EntradaIndice* construir_indice(Nodo *cabeza, int *tamano_out);
+/*
+ * Fuerza bruta: recorre la lista nodo por nodo desde el inicio.
+ * Devuelve el nodo con ese ID o NULL si no existe.
+ */
+Nodo *busquedaLineal(const Lista *lista, int id);
 
-/* Realiza búsqueda binaria sobre el índice auxiliar. */
-Nodo* busqueda_indexada(EntradaIndice *indice, int tamano,
-                        int id_buscado, long *comparaciones);
+/*
+ * Búsqueda binaria recursiva sobre el índice ordenado por ID.
+ * Devuelve el nodo con ese ID o NULL si no existe.
+ */
+Nodo *busquedaBinaria(const Indice *indice, int id);
 
-/* Libera la memoria utilizada por el índice. */
-void liberar_indice(EntradaIndice *indice);
+/* Libera el arreglo del índice (los nodos NO se liberan: son de la lista). */
+void liberarIndice(Indice *indice);
 
-#endif
+#endif /* BUSQUEDA_H */
